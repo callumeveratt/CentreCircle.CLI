@@ -4,5 +4,5 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "bin": { "cc": "src/cli.ts" }
+  "bin": { "cc": "src/cli.ts", "centrecircle": "src/cli.ts" }
 }

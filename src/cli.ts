@@ -2,7 +2,7 @@
 // cc: CentreCircle CLI. Wraps api.centrecircleapp.com (the API the portal itself uses).
 // Read commands are verified against the live API. Write commands go through `cc api`
 // until their endpoints have been captured (see README).
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -429,6 +429,23 @@ function cmdConfig(a: Args) {
   } else die("usage: cc config path|show|set <key> <value>");
 }
 
+// Installs SKILL.md as a Claude Code skill (~/.claude/skills/centrecircle-cli/SKILL.md). Copy, not a symlink: Windows needs privileges for those.
+function cmdSkill(a: Args) {
+  const dest = join(process.env.CLAUDE_SKILLS_DIR ?? join(homedir(), ".claude", "skills"), "centrecircle-cli");
+  const file = join(dest, "SKILL.md");
+  if (a._[1] === "install") {
+    const src = join(import.meta.dir, "..", "SKILL.md");
+    if (!existsSync(src)) die(`SKILL.md not found next to the CLI (${src})`);
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(file, readFileSync(src));
+    console.log(`installed ${file}\nRestart or reload Claude Code to pick it up. Re-run after updating the CLI.`);
+  } else if (a._[1] === "path") console.log(file);
+  else if (a._[1] === "uninstall") {
+    if (!existsSync(file)) return console.log("not installed");
+    rmSync(dest, { recursive: true }); console.log(`removed ${dest}`);
+  } else die("usage: cc skill install|uninstall|path");
+}
+
 async function cmdAuth(a: Args) {
   const sub = a._[1];
   if (sub === "login") {
@@ -456,6 +473,7 @@ const HELP = `cc: CentreCircle CLI (league ${LEAGUE || "NOT SET: run `cc config 
 
   cc config path|show|set league <code> | set ages <12-17|14|none>
   cc auth login|set-token|status|renew
+  cc skill install|uninstall|path              install the Claude Code skill wrapper
   cc fixtures --date D [--to D] [--no-ref] [--skip-midnight] [--status S] [--json]
   cc fixture <id>
   cc referees <fixtureId> [--search t]         suggested referees for a game
@@ -475,7 +493,7 @@ dry = !!args.flags["dry-run"];
 ageRange = resolveAge(args);
 const cmd = args._[0];
 const table: Record<string, (a: Args) => Promise<void>> = {
-  auth: cmdAuth, config: async (a) => cmdConfig(a), referees: cmdReferees, appoint: cmdAppoint, unappoint: cmdUnappoint, advertise: cmdAdvertise, "cancel-advert": cmdCancelAdvert, "game-off": cmdGameOff, "game-on": cmdGameOn, fixtures: cmdFixtures, fixture: cmdFixture, "spare-games": cmdSpare, coverage: cmdCoverage, api: cmdApi,
+  auth: cmdAuth, config: async (a) => cmdConfig(a), skill: async (a) => cmdSkill(a), referees: cmdReferees, appoint: cmdAppoint, unappoint: cmdUnappoint, advertise: cmdAdvertise, "cancel-advert": cmdCancelAdvert, "game-off": cmdGameOff, "game-on": cmdGameOn, fixtures: cmdFixtures, fixture: cmdFixture, "spare-games": cmdSpare, coverage: cmdCoverage, api: cmdApi,
 };
 if (!cmd || !table[cmd]) console.log(HELP);
 else await table[cmd](args);

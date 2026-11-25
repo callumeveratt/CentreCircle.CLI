@@ -9,17 +9,50 @@ through the portal. Bun + TypeScript, single file, no dependencies.
 > with CentreCircle's terms and your organisation's rules. Write commands change real data and notify real people: read
 > [Safety](#safety) first.
 
+## Prerequisites
+
+- **[Bun](https://bun.sh)**: the runtime. Node isn't needed, and there are no other dependencies. Developed and tested on Bun 1.4.5 on Windows 11 (arm64); other platforms should work but are untested.
+- **Git**, to clone the repo.
+- **A CentreCircle account** with the role you want to act as (for example a league or referee secretary). What you can read or change depends on that role, and the server enforces it.
+- **Your league code** (see [League code and login](#league-code-and-login)).
+- Optional: **[Claude Code](https://claude.com/claude-code)**, if you want the skill wrapper.
+
 ## Install
 
 ```sh
-bun install -g .      # or: bun link   (from this folder)
+git clone git@github.com:callumeveratt/CentreCircle.CLI.git     # or the https:// URL
+cd CentreCircle.CLI
+bun link                       # puts `cc` and `centrecircle` (same program) on your PATH
 cc config set league <your-league-code>
-cc auth login         # prompts for email + password (hidden); stores only the token
+cc auth login                  # prompts for email + password (hidden); stores only the token
+cc fixtures --date 2026-11-29  # check it works
 ```
 
+`bun link` installs the commands into `~/.bun/bin` (`%USERPROFILE%\.bun\bin` on Windows); make sure that folder is on your `PATH`.
+The commands run the code in this folder directly, so `git pull` updates them, but don't move or delete the folder (re-run `bun link` if you do).
+Use `centrecircle` if `cc` clashes with the C compiler on your system. Remove with `bun unlink`.
+
+### League code and login
+
 Your league code is the `leagueCode=` value you can see in the portal's network requests (or ask your league secretary).
-The token lasts about two weeks and is stored in `~/.config/cc/auth.json` (mode 600 where supported). For CI or one-offs set
+The login token lasts about two weeks and is stored in `~/.config/cc/auth.json` (mode 600 where supported). For CI or one-offs set
 `CC_TOKEN` instead. Your password is never stored.
+
+### Troubleshooting
+
+- `cc: command not found`: `~/.bun/bin` isn't on your `PATH`; add it and open a new terminal.
+- `no league set`: run `cc config set league <code>`.
+- `not logged in` or a 401: run `cc auth login` again (the token lasts about two weeks).
+- Git Bash on Windows rewrites arguments that start with `/`; for `cc api /league/...` use PowerShell or `MSYS_NO_PATHCONV=1`.
+
+### Claude Code skill (optional)
+
+```sh
+cc skill install     # copies SKILL.md to ~/.claude/skills/centrecircle-cli/
+```
+
+Restart Claude Code afterwards. Re-run it after updating the CLI; `cc skill uninstall` removes it. The skill tells Claude how to use the CLI,
+including the dry-run and approval rules, and to never handle your password (you run `cc auth login` yourself).
 
 ## Commands
 
@@ -37,6 +70,7 @@ Every command accepts `--json`. Write commands are a **dry run unless you pass `
 | `cc coverage --from <Sunday> [--bands 12-14,15-17]` | Share of games with a referee for a 7-day week, per band (default: per age group) |
 | `cc api <METHOD> <path> [-p k=v] [--body JSON]` | Raw call; add `--dry-run` to preview |
 | `cc config path\|show\|set league <code>\|set ages <range\|none>` | Configuration |
+| `cc skill install\|uninstall\|path` | Install the Claude Code skill wrapper |
 
 Not supported yet: assistant referees (only the referee slot has been verified).
 
