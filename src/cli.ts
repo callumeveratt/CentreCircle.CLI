@@ -556,5 +556,15 @@ const cmd = args._[0];
 const table: Record<string, (a: Args) => Promise<void>> = {
   auth: cmdAuth, config: async (a) => cmdConfig(a), skill: async (a) => cmdSkill(a), referees: cmdReferees, appoint: cmdAppoint, unappoint: cmdUnappoint, advertise: cmdAdvertise, "cancel-advert": cmdCancelAdvert, "game-off": cmdGameOff, "game-on": cmdGameOn, fixtures: cmdFixtures, duplicates: cmdDuplicates, pending: cmdPending, fixture: cmdFixture, "spare-games": cmdSpare, coverage: cmdCoverage, api: cmdApi,
 };
+// A value with spaces must be quoted. Unquoted, the shell splits it and the extra words arrive as stray positional arguments
+// (`--name Kevin Wesson` would silently become the name "Kevin"). Refuse rather than act on a truncated value.
+const MAX_POSITIONAL: Record<string, number> = {
+  auth: 2, skill: 2, fixtures: 1, duplicates: 1, pending: 1, fixture: 2, referees: 2, appoint: 2, unappoint: 2, advertise: 2,
+  "cancel-advert": 2, "game-off": 2, "game-on": 2, "spare-games": 1, coverage: 1, api: 3, config: 99,
+};
+if (cmd && table[cmd] && MAX_POSITIONAL[cmd] !== undefined) {
+  const extra = args._.slice(MAX_POSITIONAL[cmd]);
+  if (extra.length) die(`unexpected argument${extra.length > 1 ? "s" : ""} "${extra.join(" ")}". Quote values that contain spaces, e.g. --name "Kevin Wesson" or --note "BOT: Invalid Game".`);
+}
 if (!cmd || !table[cmd]) console.log(HELP);
 else await table[cmd](args);

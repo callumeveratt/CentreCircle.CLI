@@ -42,6 +42,7 @@ The login token lasts about two weeks and is stored in `~/.config/cc/auth.json` 
 
 - `cc: command not found`: `~/.bun/bin` isn't on your `PATH`; add it and open a new terminal.
 - `no league set`: run `cc config set league <code>`.
+- `unexpected argument ...`: quote any value that contains spaces, e.g. `--name "Kevin Wesson"` or `--note "BOT: Invalid Game"`.
 - `not logged in` or a 401: run `cc auth login` again (the token lasts about two weeks).
 - Git Bash on Windows rewrites arguments that start with `/`; for `cc api /league/...` use PowerShell or `MSYS_NO_PATHCONV=1`.
 
