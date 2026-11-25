@@ -60,11 +60,13 @@ Every command accepts `--json`. Write commands are a **dry run unless you pass `
 
 | Command | What it does |
 |---|---|
-| `cc fixtures --date D [--to D] [--no-ref] [--skip-midnight] [--status S]` | List fixtures. `--no-ref` = Normal games with no referee (advertised ones included, as in the portal). `--skip-midnight` drops placeholder 00:00 KOs. |
+| `cc fixtures --date D [--to D] [--no-ref] [--unadvertised] [--divisions] [--skip-midnight] [--status S]` | List fixtures. `--no-ref` = Normal games with no referee (advertised ones included, as in the portal); `--unadvertised` drops games with a live advert; `--skip-midnight` drops placeholder 00:00 KOs; `--divisions` adds each game's competition (one extra call per game). |
+| `cc duplicates --date D [--live]` | The same two teams listed more than once on a date (`--live` = Normal games only) |
+| `cc pending [--days 10]` | Appointments and cleared slots waiting to be mirrored into FA Fulltime (the portal's Workflow > Pending assignments) |
 | `cc fixture <id>` | One fixture as JSON |
 | `cc referees <id> [--search text]` | Suggested referees for a game (distance, games) |
 | `cc appoint <id> --email E [--yes]` / `cc unappoint <id> [--yes]` | Set / clear the referee |
-| `cc advertise <id> [--fee 22] [--auto] [--yes]` / `cc cancel-advert <id> [--yes]` | Advertise the referee role (notifies referees) / cancel it |
+| `cc advertise <id> [--fee N] [--auto] [--yes]` / `cc cancel-advert <id> [--yes]` | Advertise the referee role (notifies referees) / cancel it. The fee comes from `advertFees` in the config unless `--fee` is given; there is no built-in default. |
 | `cc game-off <id> --note T [--reason R] [--yes]` / `cc game-on <id> [--yes]` | Postpone a game (visible to clubs) / restore it |
 | `cc spare-games --date D` | Copy-ready "games needing a referee" email text |
 | `cc coverage --from <Sunday> [--bands 12-14,15-17]` | Share of games with a referee for a 7-day week, per band (default: per age group) |
@@ -91,6 +93,7 @@ Nothing is hardcoded to an age range. The age group is the fixture's `ageCap`.
   "league": "your-league-code",
   "ages": { "min": 12, "max": 17 },
   "bands": [{ "label": "U12-U14", "min": 12, "max": 14 }, { "label": "U15-U17", "min": 15, "max": 17 }],
+  "advertFees": [{ "min": 12, "max": 14, "fee": 22 }, { "min": 15, "max": 17, "fee": 24 }],
   "spareGames": {
     "intro": ["Good morning all,", "", "We have some games still requiring a referee."],
     "contacts": ["U12-U14 Jane (07xxx xxxxxx)", "referee@example.org"],
@@ -100,7 +103,7 @@ Nothing is hardcoded to an age range. The age group is the fixture's `ageCap`.
 }
 ```
 
-Contact lines and cup rules are league-specific, so nothing ships by default. Cup games are flagged `(CUP)`; the extra-time line only
+Contact lines, cup rules and advert fees (pounds, by age group) are league-specific, so nothing ships by default: `advertise` refuses to run without a fee from `--fee` or `advertFees`. Cup games are flagged `(CUP)`; the extra-time line only
 appears if you configure it. `CC_LEAGUE` overrides the league.
 
 ## Safety
@@ -132,6 +135,7 @@ Gotchas:
 - The list caps at 800 rows; the CLI pages.
 - The person to appoint is resolved from **name + email**. A body with only a `userId` returns 200 and is silently ignored.
 - `GET /fixture/{id}` does not include `matchAdvert`; only the list does. Cancelling an advert leaves an empty `matchAdvert` object, so "advertised" means it has a `referee` role.
+- A fixture's competition lives in different places by type: league games have it in `division` (only on `GET /fixture/{id}`; the list leaves `competitionName` empty), cup games have `competitionName` in the list and no `division`. Cup detection reads both.
 - Fee is in pence. Age group = `ageCap`. Referee = `officials[]` with `role=="referee" && position==1`.
 - Git Bash rewrites leading-slash arguments (`/league/...`); use PowerShell or `MSYS_NO_PATHCONV=1` with `cc api`.
 

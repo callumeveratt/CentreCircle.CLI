@@ -17,6 +17,7 @@ type Config = {
   league?: string;
   ages?: { min?: number; max?: number };
   bands?: Band[];
+  advertFees?: { min: number; max: number; fee: number }[]; // pounds, by age group
   spareGames?: { intro?: string[]; contacts?: string[]; cupNote?: string; cupExtraTime?: { min: number; max: number; text: string }[] };
 };
 let CONFIG: Config = {};
@@ -161,7 +162,23 @@ function resolveAge(a: Args) {
   return c && (c.min !== undefined || c.max !== undefined) ? { min: c.min ?? 0, max: c.max ?? 99 } : null;
 }
 const inScope = (f: Fixture) => !ageRange || (f.ageCap >= ageRange.min && f.ageCap <= ageRange.max);
-const isCup = (f: Fixture) => /cup/i.test(f.competitionName ?? "");
+// Where a fixture's competition lives depends on its type: league games have it in `division` ("Under 14 C"), which only the
+// single-fixture endpoint returns (the list leaves `competitionName` empty for them); cup games ("U 14 Invitation Cup (2nd Round)")
+// have `competitionName` in the list and no `division`. addDivisions() fetches `division` for the given fixtures (6 at a time);
+// compOf() then reads division first, then competitionName, so both kinds are covered.
+async function addDivisions(fx: Fixture[]): Promise<void> {
+  let i = 0;
+  const worker = async () => {
+    for (;;) {
+      const f = fx[i++]; if (!f) return;
+      const d = await api("GET", `/fixture/${f.id}`);
+      (f as any).division = (d?.data ?? d)?.division ?? null;
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+}
+const compOf = (f: Fixture) => ((f as any).division ?? f.competitionName ?? "") as string;
+const isCup = (f: Fixture) => /cup/i.test(compOf(f));
 
 const out = (a: Args, data: unknown, text: () => string) =>
   a.flags.json ? console.log(JSON.stringify(data, null, 2)) : console.log(text());
@@ -174,6 +191,8 @@ async function cmdFixtures(a: Args) {
   fx = fx.filter(inScope);
   if (a.flags["no-ref"]) fx = fx.filter((f) => f.status === "Normal" && !hasReferee(f));
   if (a.flags["skip-midnight"]) fx = fx.filter((f) => koTime(f) !== "00:00");
+  if (a.flags.unadvertised) fx = fx.filter((f) => !f.matchAdvert);
+  if (a.flags.divisions) await addDivisions(fx); // one extra call per fixture
   out(a, fx, () =>
     fx.map((f) => `${f.id}  ${localDate(f)} ${koTime(f)}  U${f.ageCap}  ${f.club1Name} v ${f.club2Name}  [${f.status}${f.matchAdvert ? ", advertised" : ""}]  ref: ${(f.officials ?? []).find((o) => o.role === "referee")?.name ?? "-"}`).join("\n") +
     `\n${fx.length} fixtures`);
@@ -199,6 +218,7 @@ const extraTime = (age: number) => CONFIG.spareGames?.cupExtraTime?.find((r) => 
 async function cmdSpare(a: Args) {
   const date = String(a.flags.date ?? die("--date required"));
   const fx = (await fixtures(date, date)).filter((f) => inScope(f) && f.status === "Normal" && !hasReferee(f) && koTime(f) !== "00:00");
+  await addDivisions(fx); // needed for cup detection
   const groups = new Map<string, Fixture[]>();
   for (const f of fx) { const k = koTime(f); groups.set(k, [...(groups.get(k) ?? []), f]); }
   const cups = fx.filter(isCup);
@@ -219,7 +239,7 @@ async function cmdSpare(a: Args) {
 
 async function cmdCoverage(a: Args) {
   const from = String(a.flags.from ?? die("--from <Sunday YYYY-MM-DD> required"));
-  const fx = (await fixtures(from, addDays(from, 6))).filter((f) => inScope(f) && f.status === "Normal" && koTime(f) !== "00:00");
+  const fx = (await fixtures(from, addDays(from, 6))).filter((f) => inScope(f) && f.status === "Normal" && (koTime(f) !== "00:00" || hasReferee(f))); // placeholder 00:00 KOs count only if a referee is on them
   // Bands: `--bands 12-14,15-17`, else config.bands, else one row per age group present.
   const lbl = (lo: number, hi: number) => (lo === hi ? `U${lo}` : `U${lo}-U${hi}`);
   const bands: Band[] = typeof a.flags.bands === "string"
@@ -234,6 +254,42 @@ async function cmdCoverage(a: Args) {
   rows.push({ band: "Total", games: tg, withReferee: tw, coverage: tg ? Math.round((tw / tg) * 1000) / 10 : 0 });
   out(a, rows, () => ["| | Games | With referee | Coverage |", "|---|---|---|---|", ...rows.map((r) => `| ${r.band} | ${r.games} | ${r.withReferee} | ${r.coverage.toFixed(1)}% |`)].join("\n") +
     "\n\n# CentreCircle data only: games with a referee / games. Cross-check other systems yourself.");
+}
+
+// Same two teams (same way round) listed more than once on the date: the usual sign of a duplicated import.
+async function cmdDuplicates(a: Args) {
+  const date = String(a.flags.date ?? die("--date required"));
+  const fx = (await fixtures(date, date)).filter(inScope).filter((f) => !a.flags.live || f.status === "Normal");
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const groups = new Map<string, Fixture[]>();
+  for (const f of fx) { const k = `${norm(f.club1Name)}|${norm(f.club2Name)}`; groups.set(k, [...(groups.get(k) ?? []), f]); }
+  const dups = [...groups.values()].filter((g) => g.length > 1);
+  await addDivisions(dups.flat());
+  out(a, dups, () => dups.length === 0 ? "no duplicates" :
+    dups.map((g) => `${g[0].club1Name} v ${g[0].club2Name}\n` + g.map((f) => `  ${f.id}  ${koTime(f)}  [${f.status}]  ${compOf(f) || "?"}  ref: ${refOf(f)?.name ?? "-"}`).join("\n")).join("\n\n") + `\n${dups.length} duplicated pairings`);
+}
+
+// Appointments waiting to be mirrored into FA Fulltime (the portal's Workflow > Pending assignments tab).
+// A slot with name "None" is a *cleared* slot (a referee was removed), not an appointment.
+async function cmdPending(a: Args) {
+  const days = Number(a.flags.days ?? 10);
+  const now = new Date();
+  const rows: any[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page: any[] = (await api("GET", `/league/${league()}/fixtures`, {
+      select: "id,status,time,club1Name,club2Name,competitionName,ageCap,updateTimeUnix,fixtureOfficials(name,email,role,position,assignedBy)",
+      pendingOfficialsOnly: true, excludeRefsuiteManaged: true, timeFrom: now.toISOString().slice(0, 23),
+      updatedSinceUnix: Math.floor(now.getTime() / 1000 - days * 86400), statuses: ",Normal", order: "time.asc", limit: 100, offset,
+    })) ?? [];
+    rows.push(...page);
+    if (page.length < 100) break;
+  }
+  const view = rows.map((f) => ({
+    id: f.id, date: localDate(f), ko: koTime(f), ageCap: f.ageCap, competition: f.competitionName, home: f.club1Name, away: f.club2Name,
+    officials: (f.fixtureOfficials ?? []).map((o: any) => ({ role: o.role, position: o.position, name: o.name, email: o.email, cleared: !o.name || o.name.toLowerCase() === "none" })),
+  }));
+  out(a, view, () => view.map((r) => `${r.id}  ${r.date} ${r.ko}  U${r.ageCap ?? "?"}  ${r.home} v ${r.away}\n` +
+    r.officials.map((o: any) => `    ${o.role}${o.position ? " " + o.position : ""}: ${o.cleared ? "CLEARED (no referee)" : o.name}`).join("\n")).join("\n") + `\n${view.length} fixtures with pending changes (last ${days} days; names only, emails are in --json)`);
 }
 
 // ---------- referees & appointments (captured live 25 Nov 2026) ----------
@@ -324,10 +380,12 @@ function gate(problems: string[], a: Args) {
 }
 
 async function cmdAdvertise(a: Args) {
-  const id = a._[1] ?? die("usage: cc advertise <fixtureId> [--fee 22] [--auto] [--yes]");
-  const fee = Number(a.flags.fee ?? 22);
-  if (!Number.isFinite(fee) || fee <= 0) die("--fee must be pounds, e.g. 22");
+  const id = a._[1] ?? die("usage: cc advertise <fixtureId> [--fee N] [--auto] [--yes]");
   const f = await getFixture(id);
+  // Fee is league policy and varies by age group, so it comes from config.advertFees (or --fee), never a built-in default.
+  const configured = CONFIG.advertFees?.find((r) => f.ageCap >= r.min && f.ageCap <= r.max)?.fee;
+  const fee = Number(a.flags.fee ?? configured ?? NaN);
+  if (!Number.isFinite(fee) || fee <= 0) die(`no advert fee known for U${f.ageCap}: pass --fee <pounds> or set advertFees in the config`);
   const p: string[] = [];
   need(f.status === "Normal", `fixture status is ${f.status}`, a, p);
   need(!f.matchAdvert, "already advertised", a, p);
@@ -474,7 +532,9 @@ const HELP = `cc: CentreCircle CLI (league ${LEAGUE || "NOT SET: run `cc config 
   cc config path|show|set league <code> | set ages <12-17|14|none>
   cc auth login|set-token|status|renew
   cc skill install|uninstall|path              install the Claude Code skill wrapper
-  cc fixtures --date D [--to D] [--no-ref] [--skip-midnight] [--status S] [--json]
+  cc fixtures --date D [--to D] [--no-ref] [--unadvertised] [--divisions] [--skip-midnight] [--status S] [--json]
+  cc duplicates --date D [--live]              same two teams listed twice on a date (--live: Normal games only)
+  cc pending [--days 10]                       appointments/clears waiting to be mirrored into Fulltime
   cc fixture <id>
   cc referees <fixtureId> [--search t]         suggested referees for a game
   cc appoint <fixtureId> --email E [--yes]     appoint referee (dry run unless --yes; refuses advertised/filled/non-Normal unless --force)
@@ -493,7 +553,7 @@ dry = !!args.flags["dry-run"];
 ageRange = resolveAge(args);
 const cmd = args._[0];
 const table: Record<string, (a: Args) => Promise<void>> = {
-  auth: cmdAuth, config: async (a) => cmdConfig(a), skill: async (a) => cmdSkill(a), referees: cmdReferees, appoint: cmdAppoint, unappoint: cmdUnappoint, advertise: cmdAdvertise, "cancel-advert": cmdCancelAdvert, "game-off": cmdGameOff, "game-on": cmdGameOn, fixtures: cmdFixtures, fixture: cmdFixture, "spare-games": cmdSpare, coverage: cmdCoverage, api: cmdApi,
+  auth: cmdAuth, config: async (a) => cmdConfig(a), skill: async (a) => cmdSkill(a), referees: cmdReferees, appoint: cmdAppoint, unappoint: cmdUnappoint, advertise: cmdAdvertise, "cancel-advert": cmdCancelAdvert, "game-off": cmdGameOff, "game-on": cmdGameOn, fixtures: cmdFixtures, duplicates: cmdDuplicates, pending: cmdPending, fixture: cmdFixture, "spare-games": cmdSpare, coverage: cmdCoverage, api: cmdApi,
 };
 if (!cmd || !table[cmd]) console.log(HELP);
 else await table[cmd](args);

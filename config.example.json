@@ -1,9 +1,32 @@
 {
   "league": "your-league-code",
-  "ages": { "min": 12, "max": 17 },
+  "ages": {
+    "min": 12,
+    "max": 17
+  },
   "bands": [
-    { "label": "U12-U14", "min": 12, "max": 14 },
-    { "label": "U15-U17", "min": 15, "max": 17 }
+    {
+      "label": "U12-U14",
+      "min": 12,
+      "max": 14
+    },
+    {
+      "label": "U15-U17",
+      "min": 15,
+      "max": 17
+    }
+  ],
+  "advertFees": [
+    {
+      "min": 12,
+      "max": 14,
+      "fee": 22
+    },
+    {
+      "min": 15,
+      "max": 17,
+      "fee": 24
+    }
   ],
   "spareGames": {
     "intro": [
@@ -18,9 +41,21 @@
     ],
     "cupNote": "all followed by kicks from the penalty mark",
     "cupExtraTime": [
-      { "min": 12, "max": 13, "text": "5 mins e/w extra time" },
-      { "min": 14, "max": 16, "text": "10 mins e/w extra time" },
-      { "min": 17, "max": 17, "text": "15 mins e/w extra time" }
+      {
+        "min": 12,
+        "max": 13,
+        "text": "5 mins e/w extra time"
+      },
+      {
+        "min": 14,
+        "max": 16,
+        "text": "10 mins e/w extra time"
+      },
+      {
+        "min": 17,
+        "max": 17,
+        "text": "15 mins e/w extra time"
+      }
     ]
   }
 }
