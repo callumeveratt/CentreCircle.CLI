@@ -108,6 +108,10 @@ game-off/game-on) including the guards and idempotent re-runs. `cc auth renew` a
 `spare-games` club short-names are a regex approximation (`Junior Football Club`/`J.F.C.` -> `JFC`, `Football Club`/`F.C.` -> `FC`,
 sub-team suffixes dropped); always check them.
 
+## Licence
+
+MIT, see [LICENSE](LICENSE). Provided as is, with no warranty: you are responsible for what the write commands do to your league's data.
+
 ## Claude skill
 
 [`SKILL.md`](SKILL.md) is a skill wrapper so an AI agent can drive the CLI with the dry-run/approval rules above.
