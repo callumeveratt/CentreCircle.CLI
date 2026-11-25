@@ -141,7 +141,8 @@ async function fixtures(from: string, to: string, statuses = ""): Promise<Fixtur
   }
   return out.filter((f) => localDate(f) >= from && localDate(f) <= to);
 }
-const hasReferee = (f: Fixture) => (f.officials ?? []).some((o) => o.role === "referee" && o.position === 1);
+// A removed referee leaves a slot behind with name "None" (a *cleared* slot); that is not a referee.
+const hasReferee = (f: Fixture) => (f.officials ?? []).some((o) => o.role === "referee" && o.position === 1 && !!o.name && o.name.trim().toLowerCase() !== "none");
 // API `time` is a true UTC instant; the league runs on UK local time (a BST 00:00 placeholder arrives as 23:00Z).
 const LONDON = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false });
 const koTime = (f: Fixture) => LONDON.format(new Date(f.time)).replace(/^24:/, "00:");

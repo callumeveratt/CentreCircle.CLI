@@ -133,6 +133,7 @@ Gotchas:
 - `time` is a UTC instant; leagues run on UK time. A BST midnight placeholder arrives as `23:00Z` the day before, so the CLI converts to Europe/London.
 - `endDate` is a midnight instant, not an inclusive day. `start=end=D` returns only the 00:00 placeholders. The CLI queries D-1 to D+1 and trims to UK local dates.
 - The list caps at 800 rows; the CLI pages.
+- Removing a referee leaves the slot behind with `name: "None"` (a *cleared* slot). It is not a referee; the CLI treats it as vacant everywhere (`--no-ref`, `spare-games`, `coverage`).
 - The person to appoint is resolved from **name + email**. A body with only a `userId` returns 200 and is silently ignored.
 - `GET /fixture/{id}` does not include `matchAdvert`; only the list does. Cancelling an advert leaves an empty `matchAdvert` object, so "advertised" means it has a `referee` role.
 - A fixture's competition lives in different places by type: league games have it in `division` (only on `GET /fixture/{id}`; the list leaves `competitionName` empty), cup games have `competitionName` in the list and no `division`. Cup detection reads both.
